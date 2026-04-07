@@ -214,7 +214,7 @@ class DeviceSetup:
 
         return False
 
-    def add_device_to_kconfig(self, vendor, codename, model):
+    def add_device_to_kconfig(self, vendor, codename, model, soc):
         self.log('STEP', 'Adding device entry to board/Kconfig')
 
         kconfig_path = self.BOARDS_DIR / 'Kconfig'
@@ -244,6 +244,7 @@ class DeviceSetup:
         new_entry = f"""
     config {vendor_upper}_{codename_upper}
         bool "Support {model}"
+        select MEDIATEK_{soc}
         default n
         help
           Say Y if you want to include support for {model}
@@ -354,7 +355,6 @@ void board_late_init(void) {{
 
         with open(defconfig_path, 'a') as f:
             f.write(f'CONFIG_{vendor_upper}_{codename_upper}=y\n')
-            f.write(f'CONFIG_MEDIATEK_{soc}=y\n')
 
         self.log('SUCCESS', f'Defconfig file created: {defconfig_path}')
         return True
@@ -443,7 +443,7 @@ void board_late_init(void) {{
             )
             return 1
 
-        if not self.add_device_to_kconfig(vendor, codename_upper, model):
+        if not self.add_device_to_kconfig(vendor, codename_upper, model, soc_internal):
             self.log('ERROR', 'Failed to add device entry to Kconfig, exiting')
             return 1
 
