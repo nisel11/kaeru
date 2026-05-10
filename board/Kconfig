@@ -432,7 +432,7 @@ menu "Device Support"
         default n
         help
           Say Y if you want to include support for Motorola Moto G Pure 2021
-		  
+
 	config TECNO_LH8N
         bool "Support Tecno Pova 5 Pro 5G"
         default n
@@ -450,4 +450,10 @@ menu "Device Support"
         default n
         help
           Say Y if you want to include support for Redmi Note 12S
+
+    config REALME_RMX2180
+        bool "Support Realme C15"
+        default n
+        help
+          Say Y if you want to include support for Realme C15
 endmenu

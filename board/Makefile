@@ -71,3 +71,4 @@ lib-$(CONFIG_MOTOROLA_ELLIS) += motorola/board-ellis.o
 lib-$(CONFIG_TECNO_LH8N) += tecno/board-lh8n.o
 lib-$(CONFIG_INFINIX_X670) += infinix/board-X670.o
 lib-$(CONFIG_XIAOMI_SEA) += xiaomi/board-sea.o
+lib-$(CONFIG_REALME_RMX2180) += realme/board-rmx2180.o
