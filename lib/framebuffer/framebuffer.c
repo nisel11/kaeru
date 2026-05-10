@@ -4,6 +4,7 @@
 //
 
 #include <lib/framebuffer.h>
+#include <lib/string.h>
 
 static fb_config_t fb_config = {0};
 
@@ -111,11 +112,10 @@ void fb_arrow_right(uint32_t x, uint32_t y, uint32_t size, uint32_t color) {
 
 void fb_text(uint32_t x, uint32_t y, const char *str, uint32_t color) {
     uint32_t pos_x = x;
-    uint32_t char_width = fb_get_char_width();
     
     while (*str) {
         fb_char(pos_x, y, *str, color);
-        pos_x += char_width;
+        pos_x += fb_get_char_width();
         str++;
     }
 }
@@ -246,3 +246,82 @@ void framebuffer_init(void) {
             CONFIG_FRAMEBUFFER_BYTES_PER_PIXEL,
             CONFIG_FRAMEBUFFER_ALIGNMENT);
 }
+
+#ifdef CONFIG_FRAMEBUFFER_LOGO
+int fb_logo_parse(uint32_t index, void **out_addr, uint32_t *out_len) {
+    uint32_t *p = (uint32_t *)CONFIG_LOGO_ADDRESS;
+
+    uint32_t logonum = p[0];
+    if (index >= logonum)
+        return -1;
+
+    *out_len  = (index < logonum - 1) ? p[3 + index] - p[2 + index] : p[1] - p[2 + index];
+    *out_addr = (void *)((uint8_t *)CONFIG_LOGO_ADDRESS + p[2 + index]);
+    return 0;
+}
+
+static void fb_logo_blit(void *src, uint32_t w, uint32_t h, uint32_t bpp) {
+    if (!fb_config.buffer) return;
+
+    uint32_t *d = fb_config.buffer;
+    uint32_t stride = fb_config.stride / 4;
+
+    if (bpp == 32 && stride == w) {
+        memcpy(d, src, (size_t)(w * h * 4));
+        return;
+    }
+
+    if (bpp == 32) {
+        uint32_t *s = (uint32_t *)src;
+        for (uint32_t i = 0; i < h; i++)
+            memcpy(d + i * stride, s + i * w, (size_t)(w * 4));
+        return;
+    }
+
+    if (bpp == 16) {
+        uint16_t *s = (uint16_t *)src;
+        for (uint32_t i = 0; i < h; i++) {
+            uint32_t *row = d + i * stride;
+            for (uint32_t j = 0; j < w; j++) {
+                uint16_t px = s[i * w + j];
+                uint8_t r   = (px >> 8) & 0xF8;
+                uint8_t g   = (px >> 3) & 0xFC;
+                uint8_t b   = (px << 3) & 0xF8;
+                row[j] = 0xFF000000u | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+            }
+        }
+        return;
+    }
+
+    // Unsupported bpp
+}
+
+void fb_logo_show(uint32_t index, bool update) {
+    if (!fb_config.buffer) return;
+
+    void *comp_data;
+    uint32_t comp_len;
+    if (fb_logo_parse(index, &comp_data, &comp_len) < 0)
+        return;
+
+    void *tempfb = (void *)CONFIG_LOGO_TEMPFB_ADDR;
+    int (*decompress)(void *, void *, int, int) = (int (*)(void *, void *, int, int))(CONFIG_LOGO_DECOMPRESS_ADDR | 1);
+
+    int raw_size = decompress(comp_data, tempfb, (int)comp_len, (int)(fb_config.width * fb_config.height * 4));
+    if (raw_size <= 0)
+        return;
+
+    uint32_t px = fb_config.width * fb_config.height;
+    uint32_t bpp;
+    if (raw_size == (int)(px * 4)) bpp = 32;
+    else if (raw_size == (int)(px * 2)) bpp = 16;
+    else return;
+
+    fb_logo_blit(tempfb, fb_config.width, fb_config.height, bpp);
+
+    if (update) {
+        void (*disp_update)(uint32_t, uint32_t, uint32_t, uint32_t) = (void (*)(uint32_t, uint32_t, uint32_t, uint32_t))(CONFIG_DISP_UPDATE_ADDR | 1);
+        disp_update(0, 0, fb_config.width, fb_config.height);
+    }
+}
+#endif

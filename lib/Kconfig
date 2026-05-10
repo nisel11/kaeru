@@ -63,6 +63,40 @@ menu "Framebuffer Support"
 			  This is used internally for buffer calculations.
 	endmenu
 
+	menu "Logo Support"
+		config FRAMEBUFFER_LOGO
+			bool "Enable logo support"
+			default n
+			help
+			  Enable support for parsing and drawing images from logo partition.
+
+		if FRAMEBUFFER_LOGO
+			config LOGO_ADDRESS
+				hex "Logo binary base address"
+				help
+				  Memory address where the logo.bin is loaded.
+                                  (from expdb: mt_get_logo_db_addr_pa: ADDRESS)
+
+			config LOGO_TEMPFB_ADDR
+				hex "Logo decompression scratch buffer address"
+				help
+				  Address of buffer for decompressed logo images.
+                                  (from expdb: mt_get_tempfb_addr: ADDRESS)
+
+			config LOGO_DECOMPRESS_ADDR
+				hex "decompress_logo function address"
+				help
+				  Address of decompress_logo function.
+                                  Can be found by '[decompress_logo %s %d]' string.
+
+			config DISP_UPDATE_ADDR
+				hex "mt_disp_update function address"
+				help
+				  Address of mt_disp_update function.
+				  Can be found by 'mt_disp_update' string.
+		endif
+	endmenu
+
 	choice
 		prompt "Font selection"
 		default FONT_8X8_BASIC
@@ -89,6 +123,17 @@ menu "Framebuffer Support"
 		  Comic-style 8x8 pixel font with playful appearance.
 		  Good for casual/fun interfaces.
 		  Size: ~1KB
+
+	config FONT_LOGO
+		bool "Custom Font loaded from logo"
+		depends on FRAMEBUFFER_LOGO
+		help
+		  Any available font in .ttf.
+                  Good if you want not pixelized font
+                  For add font to logo you need extract logo with some tool
+                  (e.g LogoBuilder) then create .png with utils/gen_font.py
+                  and add it in latest img +1
+                  Size: ~20-60KB but in logo partition
 
 	endchoice
 

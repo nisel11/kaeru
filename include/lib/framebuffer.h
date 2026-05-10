@@ -76,3 +76,23 @@ fb_config_t *fb_get_config(void);
 uint32_t fb_rgb(uint8_t r, uint8_t g, uint8_t b);
 
 void fb_warning_icon(uint32_t cx, uint32_t y, uint32_t size);
+
+#ifdef CONFIG_FRAMEBUFFER_LOGO
+int fb_logo_parse(uint32_t index, void **out_addr, uint32_t *out_len);
+void fb_logo_show(uint32_t index, bool update);
+
+#ifdef CONFIG_FONT_LOGO
+typedef struct {
+    uint8_t *data;
+    uint16_t sheet_stride;
+} fb_font_t;
+
+// FONT_SHEET_BYTES = FONT_COLS * CELL * FONT_ROWS * CELL + 1 metadata row, 4 bytes per pixel = 672 * 449 * 4
+#define FONT_SHEET_BYTES 1206912
+void fb_font_draw_str(uint32_t x, uint32_t y, const char *str, uint32_t color, const fb_font_t *font);
+uint32_t fb_font_str_width(const char *str, const fb_font_t *font);
+void fb_font_select(fb_font_t *font);
+int fb_font_logo_load(fb_font_t *font, uint32_t logo_index, void *buf, uint32_t buf_size);
+#endif // CONFIG_FONT_LOGO
+
+#endif // CONFIG_FRAMEBUFFER_LOGO
