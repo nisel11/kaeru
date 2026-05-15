@@ -64,6 +64,17 @@ def generate(ttf_path, output_png, font_size):
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
+    # Check if any glyph exceeds 96x96 limit
+    chars = [chr(c) for c in range(FIRST_CH, FIRST_CH + GLYPHS)]
+    for ch in chars:
+        bbox = font_1x.getbbox(ch) # (left, top, right, bottom)
+        if bbox:
+            w = bbox[2] - bbox[0]
+            h = bbox[3] - bbox[1]
+            if w > 96 or h > 96:
+                print(f"ERROR: Glyph '{ch}' is too large ({w}x{h}). Max allowed is 96x96.")
+                sys.exit(1)
+
     ascent, descent = font_1x.getmetrics()
     top_pad = max(0, (CELL - ascent - descent) // 2)
     print(f"Metrics: ascent={ascent}  descent={descent}  top_pad={top_pad}px")
