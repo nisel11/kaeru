@@ -206,9 +206,11 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -std=gnu99 -Os -mthumb  \
 		   -fno-delete-null-pointer-checks \
 		   -Wno-builtin-declaration-mismatch -fPIE -Wno-main -nostdlib \
-		   -mcpu=cortex-a15
+		   -mcpu=cortex-a15 \
+		   -ffunction-sections -fdata-sections
 KBUILD_CFLAGS += -DKAERU_VERSION=\"$(KAERU_VERSION)\" -DKAERU_DEBUG=$(KAERU_DEBUG)
 KBUILD_CFLAGS += $(foreach var,$(filter CONFIG_%,$(.VARIABLES)),-D$(var)=$($(var)))
+KBUILD_AFLAGS_KERNEL :=
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__
@@ -361,7 +363,7 @@ all: arch/$(ARCH)/linker.lds kaeru stage1
 # Do modpost on a prelinked vmlinux. The finally linked vmlinux has
 # relevant sections renamed as per the linker script.
 quiet_cmd_kaeru = LD      $@.o
-cmd_kaeru = $(LD) --no-warn-rwx-segments --start-group $(kaeru-objs) $(kaeru-libs) --end-group \
+cmd_kaeru = $(LD) --no-warn-rwx-segments --gc-sections --start-group $(kaeru-objs) $(kaeru-libs) --end-group \
 			-o $@.o --script=arch/$(ARCH)/linker.lds
 
 arch/$(ARCH)/linker.lds: arch/$(ARCH)/linker.lds.S FORCE
@@ -391,7 +393,8 @@ $(kaeru-dirs): scripts_basic
 ifeq ($(CONFIG_STAGE1_SUPPORT),y)
 
 quiet_cmd_stage1 = LD      $@.o
-cmd_stage1 = $(LD) $(filter %.o,$^) -o $@.o --script=arch/$(ARCH)/linker.lds
+cmd_stage1 = $(LD) --gc-sections $(filter %.o,$^) -o $@.o --script=arch/$(ARCH)/linker.lds
+
 
 PHONY += stage1
 stage1: stage1/built-in.o arch/built-in.o arch/$(ARCH)/linker.lds FORCE
