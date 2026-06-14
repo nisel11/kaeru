@@ -13,6 +13,7 @@ LK_FUNC(int, seccfg_set_lock_state, 0x4C472994, (int lock_state));
 LK_FUNC(void, mtk_arch_reset, 0x4C45EF7C, (int));
 LK_FUNC(void, mt_disp_update, 0x4C400D4C, (uint32_t, uint32_t, uint32_t, uint32_t));
 LK_FUNC(const char *, fastboot_get_var, 0x4C429B28, (const char *));
+LK_FUNC(int, udc_stop, 0x4C45757C, (void));
 LK_FUNC(void *, malloc, CONFIG_MALLOC_ADDRESS, (size_t));
 LK_FUNC(void, free, CONFIG_FREE_ADDRESS, (void *));
 
@@ -53,10 +54,10 @@ static int load_fonts(void) {
 cleanup:
     if (medium_buf) free(medium_buf);
     if (bold_buf)   free(bold_buf);
-    
+
     g_font_medium.data = NULL;
     g_font_bold.data = NULL;
-    
+
     return -1;
 }
 
@@ -331,6 +332,123 @@ static void handle_board_info_failure(void) {
     }
 }
 
+static void cmd_read(const char *arg, void *data, unsigned int sz) {
+    char buf[128];
+
+    if (!arg || !arg[0]) {
+        fastboot_fail("Usage: oem read <hex_addr> [size]");
+        return;
+    }
+
+    const char *p = arg;
+    while (*p == ' ') p++;
+    if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) p += 2;
+
+    uint32_t addr = 0;
+    while (*p && *p != ' ') {
+        char c = *p;
+        addr <<= 4;
+        if (c >= '0' && c <= '9') addr |= c - '0';
+        else if (c >= 'a' && c <= 'f') addr |= c - 'a' + 10;
+        else if (c >= 'A' && c <= 'F') addr |= c - 'A' + 10;
+        else break;
+        p++;
+    }
+
+    int count = 64;
+    while (*p == ' ') p++;
+    if (*p) {
+        count = 0;
+        while (*p >= '0' && *p <= '9') {
+            count = count * 10 + (*p - '0');
+            p++;
+        }
+        if (count > 65536) count = 65536;
+    }
+
+    npf_snprintf(buf, sizeof(buf), "Read 0x%08X (%d bytes):", addr, count);
+    fastboot_info(buf);
+
+    uint8_t *mem = (uint8_t*)addr;
+
+    for (int i = 0; i < count; i += 16) {
+        char line[80];
+        int pos = 0;
+
+        pos += npf_snprintf(line + pos, sizeof(line) - pos, "%08X: ", addr + i);
+
+        for (int j = 0; j < 16; j++) {
+            if ((i + j) < count) {
+                pos += npf_snprintf(line + pos, sizeof(line) - pos, "%02X ", mem[i + j]);
+            } else {
+                pos += npf_snprintf(line + pos, sizeof(line) - pos, "   ");
+            }
+        }
+
+        pos += npf_snprintf(line + pos, sizeof(line) - pos, "|");
+        for (int j = 0; j < 16 && (i + j) < count; j++) {
+            char c = mem[i + j];
+            line[pos++] = (c >= 32 && c <= 126) ? c : '.';
+        }
+        line[pos++] = '|';
+        line[pos] = '\0';
+
+        fastboot_info(line);
+    }
+
+    fastboot_okay("");
+}
+
+static void cmd_chainload(const char *arg, void *data, unsigned int sz) {
+    uint32_t addr = 0x4E000000;
+
+    if (arg && arg[0]) {
+        const char *p = arg;
+        while (*p == ' ') p++;
+        if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) p += 2;
+
+        addr = 0;
+        while (*p && *p != ' ') {
+            char c = *p;
+            addr <<= 4;
+            if (c >= '0' && c <= '9') addr |= c - '0';
+            else if (c >= 'a' && c <= 'f') addr |= c - 'a' + 10;
+            else if (c >= 'A' && c <= 'F') addr |= c - 'A' + 10;
+            else break;
+            p++;
+        }
+    }
+
+    char msg[64];
+    npf_snprintf(msg, sizeof(msg), "Chainloading to 0x%08X...", addr);
+    fastboot_info(msg);
+    lk_mdelay(100);
+    fastboot_okay("");
+
+    /* Stop USB before chainloading */
+    udc_stop();
+    lk_mdelay(20);
+
+    /* Prepare CPU for jump: Disable IRQ, MMU and Caches */
+    __asm__ volatile(
+        "cpsid i\n"
+        "mrc p15, 0, r0, c1, c0, 0\n"
+        "bic r0, r0, #0x0005\n" /* Disable MMU and D-Cache */
+        "bic r0, r0, #0x1000\n" /* Disable I-Cache */
+        "mcr p15, 0, r0, c1, c0, 0\n"
+        "dsb sy\n"
+        "isb\n"
+        ::: "r0", "memory"
+    );
+
+    /* Simple jump to entry point. Pass boottags addr in r2 */
+    void (*entry)(uint32_t, uint32_t, uint32_t, uint32_t) = (void *)addr;
+    entry(0, 0, 0x4C080000, 0);
+
+    /* Should never reach here */
+    while(1);
+}
+
 void board_early_init(void) {
     printf("Entering early init for Xiaomi Redmi Note 11S 4G/POCO M4 Pro 4G/Xiaomi Redmi Note 12S\n");
 
@@ -401,6 +519,9 @@ void board_early_init(void) {
     // Suppress mt_disp_show_fastboot_logo in platform_init so we can
     // draw custom UI and text instead.
     PATCH_MEM(0x4C404830, 0x2001, 0x4770);
+
+    fastboot_register("oem read", cmd_read, 1);
+    fastboot_register("oem chainload", cmd_chainload, 1);
 }
 
 void board_late_init(void) {
